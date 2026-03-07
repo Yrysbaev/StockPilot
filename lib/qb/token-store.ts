@@ -1,14 +1,16 @@
 /**
  * File-based token store for QuickBooks OAuth (dev / single-company).
- * Tokens are saved to .data/qb-tokens.json (gitignored).
+ * On Vercel, uses /tmp (ephemeral). For production persistence, use a database.
  */
 
 import { promises as fs } from "fs";
 import path from "path";
 import { refreshAccessToken } from "./auth";
+import { getDataDir } from "@/lib/data-dir";
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const TOKENS_FILE = path.join(DATA_DIR, "qb-tokens.json");
+function getTokensPath() {
+  return path.join(getDataDir(), "qb-tokens.json");
+}
 
 export interface StoredTokens {
   realmId: string;
@@ -20,17 +22,17 @@ export interface StoredTokens {
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 async function ensureDataDir() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.mkdir(getDataDir(), { recursive: true });
 }
 
 export async function saveTokens(tokens: StoredTokens): Promise<void> {
   await ensureDataDir();
-  await fs.writeFile(TOKENS_FILE, JSON.stringify(tokens, null, 2), "utf-8");
+  await fs.writeFile(getTokensPath(), JSON.stringify(tokens, null, 2), "utf-8");
 }
 
 export async function loadTokens(): Promise<StoredTokens | null> {
   try {
-    const raw = await fs.readFile(TOKENS_FILE, "utf-8");
+    const raw = await fs.readFile(getTokensPath(), "utf-8");
     return JSON.parse(raw) as StoredTokens;
   } catch {
     return null;
@@ -67,7 +69,7 @@ export async function getValidAccessToken(): Promise<{
 
 export async function clearTokens(): Promise<void> {
   try {
-    await fs.unlink(TOKENS_FILE);
+    await fs.unlink(getTokensPath());
   } catch {
     // ignore
   }

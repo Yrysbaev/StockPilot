@@ -6,8 +6,7 @@ import { mockProducts } from "@/lib/data/mock-products";
 import { mockCustomers } from "@/lib/data/mock-customers";
 import { invoices, invoiceItems } from "@/lib/data/mock-invoices";
 import { inventorySnapshots } from "@/lib/data/mock-inventory";
-
-const DATA_DIR = path.join(process.cwd(), ".data");
+import { getDataDir } from "@/lib/data-dir";
 
 export interface AnalyticsDataResponse {
   products: Product[];
@@ -24,11 +23,12 @@ export interface AnalyticsDataResponse {
  */
 export async function GET() {
   try {
-    const customersPath = path.join(DATA_DIR, "customers.json");
-    const productsPath = path.join(DATA_DIR, "products.json");
-    const invoicesPath = path.join(DATA_DIR, "invoices.json");
-    const invoiceItemsPath = path.join(DATA_DIR, "invoice_items.json");
-    const inventoryPath = path.join(DATA_DIR, "inventory_snapshots.json");
+    const dataDir = getDataDir();
+    const customersPath = path.join(dataDir, "customers.json");
+    const productsPath = path.join(dataDir, "products.json");
+    const invoicesPath = path.join(dataDir, "invoices.json");
+    const invoiceItemsPath = path.join(dataDir, "invoice_items.json");
+    const inventoryPath = path.join(dataDir, "inventory_snapshots.json");
 
     let source: "quickbooks" | "mock" = "mock";
     let products: Product[] = mockProducts;

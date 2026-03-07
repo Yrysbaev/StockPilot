@@ -10,13 +10,12 @@ import {
   mapQBItemToInventorySnapshot,
   mapQBInvoiceToApp,
 } from "@/lib/qb/map-qb-to-app";
+import { getDataDir } from "@/lib/data-dir";
 import type { Product, Customer, Invoice, InvoiceItem, InventorySnapshot } from "@/types";
 import { format } from "date-fns";
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-
 async function ensureDataDir() {
-  await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.mkdir(getDataDir(), { recursive: true });
 }
 
 /**
@@ -69,13 +68,14 @@ export async function POST() {
       .filter((item) => (item.QtyOnHand ?? 0) > 0)
       .map((item) => mapQBItemToInventorySnapshot(item, today));
 
+    const dataDir = getDataDir();
     await ensureDataDir();
     await Promise.all([
-      fs.writeFile(path.join(DATA_DIR, "customers.json"), JSON.stringify(customers, null, 2)),
-      fs.writeFile(path.join(DATA_DIR, "products.json"), JSON.stringify(products, null, 2)),
-      fs.writeFile(path.join(DATA_DIR, "invoices.json"), JSON.stringify(invoices, null, 2)),
-      fs.writeFile(path.join(DATA_DIR, "invoice_items.json"), JSON.stringify(invoiceItems, null, 2)),
-      fs.writeFile(path.join(DATA_DIR, "inventory_snapshots.json"), JSON.stringify(inventorySnapshots, null, 2)),
+      fs.writeFile(path.join(dataDir, "customers.json"), JSON.stringify(customers, null, 2)),
+      fs.writeFile(path.join(dataDir, "products.json"), JSON.stringify(products, null, 2)),
+      fs.writeFile(path.join(dataDir, "invoices.json"), JSON.stringify(invoices, null, 2)),
+      fs.writeFile(path.join(dataDir, "invoice_items.json"), JSON.stringify(invoiceItems, null, 2)),
+      fs.writeFile(path.join(dataDir, "inventory_snapshots.json"), JSON.stringify(inventorySnapshots, null, 2)),
     ]);
 
     return NextResponse.json({
