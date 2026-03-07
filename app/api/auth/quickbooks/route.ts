@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { getAuthorizationUrl } from "@/lib/qb";
+import { randomBytes } from "crypto";
 
 /**
  * GET /api/auth/quickbooks?redirect_uri=...
- * Returns the QuickBooks OAuth authorization URL.
- * redirect_uri must match the one configured in your Intuit app (e.g. http://localhost:3000/api/auth/quickbooks/callback).
+ * Returns the QuickBooks OAuth authorization URL with a state parameter (required by Intuit).
  */
 export async function GET(request: Request) {
   try {
@@ -16,11 +16,12 @@ export async function GET(request: Request) {
         { status: 400 }
       );
     }
+    const state = searchParams.get("state") ?? randomBytes(24).toString("hex");
     const authUrl = getAuthorizationUrl({
       redirectUri,
-      state: searchParams.get("state") ?? undefined,
+      state,
     });
-    return NextResponse.json({ authUrl });
+    return NextResponse.json({ authUrl, state });
   } catch (e) {
     const message = e instanceof Error ? e.message : "QuickBooks auth error";
     return NextResponse.json({ error: message }, { status: 500 });

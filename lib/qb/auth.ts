@@ -30,11 +30,12 @@ export interface TokenResponse {
 
 /**
  * Build the URL to send the user to for "Connect to QuickBooks".
- * After they authorize, QB redirects to redirectUri with ?code=...&realmId=...
+ * After they authorize, QB redirects to redirectUri with ?code=...&realmId=...&state=...
+ * State is required by Intuit for CSRF protection.
  */
 export function getAuthorizationUrl(options: {
   redirectUri: string;
-  state?: string;
+  state: string;
   scopes?: string;
 }): string {
   const { clientId, sandbox } = getQuickBooksConfig();
@@ -44,8 +45,8 @@ export function getAuthorizationUrl(options: {
     response_type: "code",
     scope: options.scopes ?? DEFAULT_SCOPES,
     redirect_uri: options.redirectUri,
+    state: options.state,
   });
-  if (options.state) params.set("state", options.state);
   return `${base}?${params.toString()}`;
 }
 
