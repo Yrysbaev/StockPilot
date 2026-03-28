@@ -21,10 +21,14 @@ export default function SettingsPage() {
   );
 }
 
+const STORAGE_KEY = "stockpilot_qb_connected";
+
 function SettingsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [connected, setConnected] = useState<boolean | null>(null);
+  /** Survives Vercel cold instances where /api/qb/status may not see /tmp tokens yet. */
+  const [persistedOAuth, setPersistedOAuth] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success: boolean; counts?: Record<string, number>; error?: string } | null>(null);
   const [authUrl, setAuthUrl] = useState<string | null>(null);
@@ -38,6 +42,12 @@ function SettingsContent() {
   }, []);
 
   useEffect(() => {
+    if (typeof window !== "undefined" && sessionStorage.getItem(STORAGE_KEY) === "1") {
+      setPersistedOAuth(true);
+    }
+  }, []);
+
+  useEffect(() => {
     refreshStatus();
   }, [refreshStatus]);
 
@@ -47,23 +57,33 @@ function SettingsContent() {
     if (connectedParam === "1") {
       setOauthMessage({ type: "success", text: "QuickBooks connected. You can run Sync now to pull your data." });
       setConnected(true);
-      refreshStatus();
+      setPersistedOAuth(true);
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(STORAGE_KEY, "1");
+      }
       router.replace("/settings", { scroll: false });
     } else if (errorParam) {
       setOauthMessage({ type: "error", text: decodeURIComponent(errorParam) });
       router.replace("/settings", { scroll: false });
     }
-  }, [searchParams, router, refreshStatus]);
+  }, [searchParams, router]);
+
+  const qpJustConnected = searchParams.get("qb_connected") === "1";
+  const showSyncSection =
+    connected === true ||
+    oauthMessage?.type === "success" ||
+    persistedOAuth ||
+    qpJustConnected;
 
   useEffect(() => {
-    if (!connected) {
+    if (!showSyncSection) {
       const base = typeof window !== "undefined" ? window.location.origin : "";
       fetch(`/api/auth/quickbooks?redirect_uri=${encodeURIComponent(`${base}/api/auth/quickbooks/callback`)}`)
         .then((r) => r.json())
         .then((d) => setAuthUrl(d.authUrl ?? null))
         .catch(() => setAuthUrl(null));
     }
-  }, [connected]);
+  }, [showSyncSection]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -103,11 +123,13 @@ function SettingsContent() {
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            {connected === null && <p className="text-sm text-muted-foreground">Checking connection…</p>}
-            {connected === true && (
+            {connected === null && !showSyncSection && (
+              <p className="text-sm text-muted-foreground">Checking connection…</p>
+            )}
+            {showSyncSection && (
               <>
                 <p className="text-sm text-emerald-600">Connected to QuickBooks.</p>
-                <Button onClick={handleSync} disabled={syncing}>
+                <Button type="button" onClick={handleSync} disabled={syncing} className="w-full sm:w-auto">
                   {syncing ? "Syncing…" : "Sync now"}
                 </Button>
                 {syncResult && (
@@ -124,7 +146,7 @@ function SettingsContent() {
                 )}
               </>
             )}
-            {connected === false && authUrl && (
+            {!showSyncSection && connected === false && authUrl && (
               <>
                 <p className="text-sm text-muted-foreground">Not connected. Connect your QuickBooks company to pull real data.</p>
                 <p className="text-xs text-muted-foreground">
