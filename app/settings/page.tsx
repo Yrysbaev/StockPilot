@@ -60,11 +60,11 @@ function SettingsContent() {
     const connectedParam = searchParams.get("qb_connected");
     const errorParam = searchParams.get("qb_error");
     if (connectedParam === "1") {
+      setSyncResult(null);
       setOauthMessage({
         type: "success",
-        text: "Authorization with QuickBooks completed. Run Sync below to pull data (the server must have stored your credentials).",
+        text: "You authorized StockPilot with QuickBooks. If Sync works, your data will load; if not, connect again (serverless hosts may need a second connect).",
       });
-      setConnected(true);
       setPersistedOAuth(true);
       if (typeof window !== "undefined") {
         sessionStorage.setItem(STORAGE_KEY, "1");
@@ -86,6 +86,10 @@ function SettingsContent() {
   const serverHasTokens = connected === true;
   /** Server checked and has no tokens; UI may still show Sync from browser OAuth session. */
   const serverSaysDisconnected = connected === false;
+  const noTokensAfterSync = syncResult?.success === false && syncResult?.code === "NO_STORED_TOKENS";
+  /** Hide the green OAuth banner once we know the server has no tokens (avoids contradicting the card). */
+  const showOAuthSuccessBanner =
+    oauthMessage?.type === "success" && !(serverSaysDisconnected || noTokensAfterSync);
 
   /** Load Connect URL whenever the server has not confirmed tokens (including reconnect after optimistic OAuth). */
   useEffect(() => {
@@ -103,8 +107,10 @@ function SettingsContent() {
     try {
       const res = await fetch("/api/sync", { method: "POST" });
       const json = await res.json();
-      if (res.ok) setSyncResult({ success: true, counts: json.counts });
-      else setSyncResult({ success: false, error: json.error, code: json.code });
+      if (res.ok) {
+        setSyncResult({ success: true, counts: json.counts });
+        refreshStatus();
+      } else setSyncResult({ success: false, error: json.error, code: json.code });
     } catch (e) {
       setSyncResult({ success: false, error: e instanceof Error ? e.message : "Sync failed" });
     } finally {
@@ -116,7 +122,7 @@ function SettingsContent() {
     <div className="min-h-screen">
       <DashboardHeaderWithSuspense title="Settings" />
       <div className="p-6 max-w-xl space-y-6">
-        {oauthMessage && (
+        {oauthMessage && (oauthMessage.type === "error" || showOAuthSuccessBanner) && (
           <div
             className={`rounded-lg border px-4 py-3 text-sm ${
               oauthMessage.type === "success"
@@ -140,46 +146,73 @@ function SettingsContent() {
             )}
             {showSyncSection && (
               <>
-                {serverHasTokens ? (
-                  <p className="text-sm text-emerald-600">
-                    QuickBooks is connected on the server. You can sync anytime.
-                  </p>
-                ) : connected === null ? (
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
-                    Sign-in completed in this browser. Checking whether the server has your credentials…
-                  </p>
+                {noTokensAfterSync ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3 dark:border-amber-900 dark:bg-amber-950/30">
+                    <p className="text-sm font-medium text-amber-950 dark:text-amber-100">
+                      Sync needs credentials on this server
+                    </p>
+                    <p className="text-sm text-amber-900/90 dark:text-amber-100/90">
+                      On serverless hosting, sign-in sometimes lands on a different instance than Sync. Connect once
+                      more so tokens are written here, then run Sync again.
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                      {authUrl ? (
+                        <Button asChild className="w-full sm:w-auto">
+                          <a href={authUrl}>Connect to QuickBooks</a>
+                        </Button>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Loading connect link…</p>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleSync}
+                        disabled={syncing}
+                        className="w-full sm:w-auto"
+                      >
+                        {syncing ? "Syncing…" : "Try Sync again"}
+                      </Button>
+                    </div>
+                  </div>
                 ) : (
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
-                    Sign-in completed in this browser, but the server does not have stored tokens yet (typical on
-                    serverless). Try Sync; if it fails, use Connect again so credentials are saved on the server.
-                  </p>
-                )}
-                <Button type="button" onClick={handleSync} disabled={syncing} className="w-full sm:w-auto">
-                  {syncing ? "Syncing…" : "Sync now"}
-                </Button>
-                {showSyncSection && serverSaysDisconnected && authUrl && (
-                  <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
-                    <a href={authUrl}>Connect to QuickBooks again</a>
-                  </Button>
-                )}
-                {syncResult && (
-                  <div className="text-sm space-y-2">
-                    {syncResult.success ? (
-                      <p className="text-muted-foreground">
-                        Synced: {syncResult.counts?.customers ?? 0} customers, {syncResult.counts?.products ?? 0} products,{" "}
-                        {syncResult.counts?.invoices ?? 0} invoices.
+                  <>
+                    {serverHasTokens ? (
+                      <p className="text-sm text-emerald-600">
+                        QuickBooks is connected on the server. You can sync anytime.
+                      </p>
+                    ) : connected === null ? (
+                      <p className="text-sm text-amber-800 dark:text-amber-200">
+                        Checking whether this server has your QuickBooks credentials…
                       </p>
                     ) : (
-                      <>
-                        <p className="text-destructive">{syncResult.error}</p>
-                        {syncResult.code === "NO_STORED_TOKENS" && authUrl && (
-                          <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
-                            <a href={authUrl}>Connect to QuickBooks</a>
-                          </Button>
-                        )}
-                      </>
+                      <p className="text-sm text-amber-800 dark:text-amber-200">
+                        This server does not have tokens yet (common on serverless). Try Sync, or connect again so
+                        credentials are saved on the same instance.
+                      </p>
                     )}
-                  </div>
+                    <div className="flex flex-wrap gap-3 items-center">
+                      <Button type="button" onClick={handleSync} disabled={syncing} className="w-full sm:w-auto">
+                        {syncing ? "Syncing…" : "Sync now"}
+                      </Button>
+                      {serverSaysDisconnected && authUrl && (
+                        <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
+                          <a href={authUrl}>Connect to QuickBooks</a>
+                        </Button>
+                      )}
+                    </div>
+                    {syncResult && (
+                      <div className="text-sm space-y-2">
+                        {syncResult.success ? (
+                          <p className="text-muted-foreground">
+                            Synced: {syncResult.counts?.customers ?? 0} customers, {syncResult.counts?.products ?? 0}{" "}
+                            products, {syncResult.counts?.invoices ?? 0} invoices.
+                          </p>
+                        ) : (
+                          <p className="text-destructive">{syncResult.error}</p>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}
