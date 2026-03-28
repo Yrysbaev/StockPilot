@@ -1,22 +1,59 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardHeaderWithSuspense } from "@/components/layout/DashboardHeaderWithSuspense";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 export default function SettingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen">
+          <DashboardHeaderWithSuspense title="Settings" />
+          <div className="p-6 text-muted-foreground">Loading…</div>
+        </div>
+      }
+    >
+      <SettingsContent />
+    </Suspense>
+  );
+}
+
+function SettingsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [connected, setConnected] = useState<boolean | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ success: boolean; counts?: Record<string, number>; error?: string } | null>(null);
   const [authUrl, setAuthUrl] = useState<string | null>(null);
+  const [oauthMessage, setOauthMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  useEffect(() => {
+  const refreshStatus = useCallback(() => {
     fetch("/api/qb/status")
       .then((r) => r.json())
       .then((d) => setConnected(d.connected))
       .catch(() => setConnected(false));
   }, []);
+
+  useEffect(() => {
+    refreshStatus();
+  }, [refreshStatus]);
+
+  useEffect(() => {
+    const connectedParam = searchParams.get("qb_connected");
+    const errorParam = searchParams.get("qb_error");
+    if (connectedParam === "1") {
+      setOauthMessage({ type: "success", text: "QuickBooks connected. You can run Sync now to pull your data." });
+      setConnected(true);
+      refreshStatus();
+      router.replace("/settings", { scroll: false });
+    } else if (errorParam) {
+      setOauthMessage({ type: "error", text: decodeURIComponent(errorParam) });
+      router.replace("/settings", { scroll: false });
+    }
+  }, [searchParams, router, refreshStatus]);
 
   useEffect(() => {
     if (!connected) {
@@ -47,6 +84,17 @@ export default function SettingsPage() {
     <div className="min-h-screen">
       <DashboardHeaderWithSuspense title="Settings" />
       <div className="p-6 max-w-xl space-y-6">
+        {oauthMessage && (
+          <div
+            className={`rounded-lg border px-4 py-3 text-sm ${
+              oauthMessage.type === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
+                : "border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100"
+            }`}
+          >
+            {oauthMessage.text}
+          </div>
+        )}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">QuickBooks data</CardTitle>
@@ -79,6 +127,12 @@ export default function SettingsPage() {
             {connected === false && authUrl && (
               <>
                 <p className="text-sm text-muted-foreground">Not connected. Connect your QuickBooks company to pull real data.</p>
+                <p className="text-xs text-muted-foreground">
+                  Add this <strong>exact</strong> Redirect URI in your Intuit app (Keys &amp; credentials → Redirect URIs):
+                </p>
+                <code className="block text-xs bg-muted px-2 py-2 rounded break-all">
+                  {typeof window !== "undefined" ? `${window.location.origin}/api/auth/quickbooks/callback` : ""}
+                </code>
                 <Button asChild>
                   <a href={authUrl}>Connect to QuickBooks</a>
                 </Button>

@@ -14,14 +14,13 @@ export async function GET(request: Request) {
     const realmId = searchParams.get("realmId");
     const redirectUri = searchParams.get("redirect_uri");
 
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
+
     if (!code) {
-      return NextResponse.json(
-        { error: "Missing code (QuickBooks did not return an authorization code)" },
-        { status: 400 }
+      return NextResponse.redirect(
+        `${baseUrl}/settings?qb_error=${encodeURIComponent("Missing authorization code from QuickBooks")}`
       );
     }
-
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.url.split("/api")[0];
     const defaultRedirectUri = `${baseUrl}/api/auth/quickbooks/callback`;
     const finalRedirectUri = redirectUri || defaultRedirectUri;
 
@@ -35,13 +34,14 @@ export async function GET(request: Request) {
       expiresAt: Date.now() + tokens.expires_in * 1000,
     });
 
-    return NextResponse.json({
-      success: true,
-      realmId: effectiveRealmId,
-      message: "Connected. You can now run Sync to pull data.",
-    });
+    return NextResponse.redirect(
+      `${baseUrl}/settings?qb_connected=1&realm=${encodeURIComponent(effectiveRealmId)}`
+    );
   } catch (e) {
     const message = e instanceof Error ? e.message : "QuickBooks callback error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
+    return NextResponse.redirect(
+      `${baseUrl}/settings?qb_error=${encodeURIComponent(message)}`
+    );
   }
 }
