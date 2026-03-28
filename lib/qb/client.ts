@@ -38,6 +38,15 @@ export async function qbGet<T = unknown>(
   if (res.status === 401) {
     throw new Error("QuickBooks access token expired or invalid. Refresh the token.");
   }
+  if (res.status === 403) {
+    const text = await res.text();
+    const apiMode = options.sandbox !== false ? "sandbox" : "production";
+    throw new Error(
+      `QuickBooks API error: 403 Forbidden (${apiMode} API). ${text.slice(0, 400)} ` +
+        `If you use a live (non-sandbox) company, set QUICKBOOKS_SANDBOX=false in env. ` +
+        `If you use a sandbox company only, set QUICKBOOKS_SANDBOX=true (default) or omit it.`
+    );
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`QuickBooks API error: ${res.status} ${text}`);
