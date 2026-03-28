@@ -39,6 +39,9 @@ export async function loadTokens(): Promise<StoredTokens | null> {
   }
 }
 
+/** Thrown when no token file exists (API maps this to a clearer user message). */
+export const QB_ERROR_NO_STORED_TOKENS = "Not connected to QuickBooks. Connect your company first.";
+
 /**
  * Returns a valid access token, refreshing if needed. Throws if no tokens or refresh fails.
  */
@@ -48,7 +51,7 @@ export async function getValidAccessToken(): Promise<{
 }> {
   const stored = await loadTokens();
   if (!stored) {
-    throw new Error("Not connected to QuickBooks. Connect your company first.");
+    throw new Error(QB_ERROR_NO_STORED_TOKENS);
   }
 
   const now = Date.now();

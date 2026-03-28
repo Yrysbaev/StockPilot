@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
-import { getValidAccessToken } from "@/lib/qb/token-store";
+import { getValidAccessToken, QB_ERROR_NO_STORED_TOKENS } from "@/lib/qb/token-store";
 import { qbQuery } from "@/lib/qb/client";
 import { QB_SANDBOX } from "@/lib/qb/config";
 import {
@@ -90,6 +90,17 @@ export async function POST() {
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Sync failed";
+    if (message === QB_ERROR_NO_STORED_TOKENS) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "NO_STORED_TOKENS",
+          error:
+            "The server could not find QuickBooks credentials. On serverless hosting (e.g. Vercel), OAuth tokens are often saved on one instance and missing on the next. Use “Connect to QuickBooks” again, or store tokens in a database for production.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: message, success: false }, { status: 500 });
   }
 }

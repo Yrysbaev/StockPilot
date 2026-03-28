@@ -30,7 +30,12 @@ function SettingsContent() {
   /** Survives Vercel cold instances where /api/qb/status may not see /tmp tokens yet. */
   const [persistedOAuth, setPersistedOAuth] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ success: boolean; counts?: Record<string, number>; error?: string } | null>(null);
+  const [syncResult, setSyncResult] = useState<{
+    success: boolean;
+    counts?: Record<string, number>;
+    error?: string;
+    code?: string;
+  } | null>(null);
   const [authUrl, setAuthUrl] = useState<string | null>(null);
   const [oauthMessage, setOauthMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -55,7 +60,10 @@ function SettingsContent() {
     const connectedParam = searchParams.get("qb_connected");
     const errorParam = searchParams.get("qb_error");
     if (connectedParam === "1") {
-      setOauthMessage({ type: "success", text: "QuickBooks connected. You can run Sync now to pull your data." });
+      setOauthMessage({
+        type: "success",
+        text: "Authorization with QuickBooks completed. Run Sync below to pull data (the server must have stored your credentials).",
+      });
       setConnected(true);
       setPersistedOAuth(true);
       if (typeof window !== "undefined") {
@@ -75,15 +83,19 @@ function SettingsContent() {
     persistedOAuth ||
     qpJustConnected;
 
+  const serverHasTokens = connected === true;
+  /** Server checked and has no tokens; UI may still show Sync from browser OAuth session. */
+  const serverSaysDisconnected = connected === false;
+
+  /** Load Connect URL whenever the server has not confirmed tokens (including reconnect after optimistic OAuth). */
   useEffect(() => {
-    if (!showSyncSection) {
-      const base = typeof window !== "undefined" ? window.location.origin : "";
-      fetch(`/api/auth/quickbooks?redirect_uri=${encodeURIComponent(`${base}/api/auth/quickbooks/callback`)}`)
-        .then((r) => r.json())
-        .then((d) => setAuthUrl(d.authUrl ?? null))
-        .catch(() => setAuthUrl(null));
-    }
-  }, [showSyncSection]);
+    if (connected === true) return;
+    const base = typeof window !== "undefined" ? window.location.origin : "";
+    fetch(`/api/auth/quickbooks?redirect_uri=${encodeURIComponent(`${base}/api/auth/quickbooks/callback`)}`)
+      .then((r) => r.json())
+      .then((d) => setAuthUrl(d.authUrl ?? null))
+      .catch(() => setAuthUrl(null));
+  }, [connected]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -92,7 +104,7 @@ function SettingsContent() {
       const res = await fetch("/api/sync", { method: "POST" });
       const json = await res.json();
       if (res.ok) setSyncResult({ success: true, counts: json.counts });
-      else setSyncResult({ success: false, error: json.error });
+      else setSyncResult({ success: false, error: json.error, code: json.code });
     } catch (e) {
       setSyncResult({ success: false, error: e instanceof Error ? e.message : "Sync failed" });
     } finally {
@@ -128,19 +140,44 @@ function SettingsContent() {
             )}
             {showSyncSection && (
               <>
-                <p className="text-sm text-emerald-600">Connected to QuickBooks.</p>
+                {serverHasTokens ? (
+                  <p className="text-sm text-emerald-600">
+                    QuickBooks is connected on the server. You can sync anytime.
+                  </p>
+                ) : connected === null ? (
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    Sign-in completed in this browser. Checking whether the server has your credentials…
+                  </p>
+                ) : (
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    Sign-in completed in this browser, but the server does not have stored tokens yet (typical on
+                    serverless). Try Sync; if it fails, use Connect again so credentials are saved on the server.
+                  </p>
+                )}
                 <Button type="button" onClick={handleSync} disabled={syncing} className="w-full sm:w-auto">
                   {syncing ? "Syncing…" : "Sync now"}
                 </Button>
+                {showSyncSection && serverSaysDisconnected && authUrl && (
+                  <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
+                    <a href={authUrl}>Connect to QuickBooks again</a>
+                  </Button>
+                )}
                 {syncResult && (
-                  <div className="text-sm">
+                  <div className="text-sm space-y-2">
                     {syncResult.success ? (
                       <p className="text-muted-foreground">
                         Synced: {syncResult.counts?.customers ?? 0} customers, {syncResult.counts?.products ?? 0} products,{" "}
                         {syncResult.counts?.invoices ?? 0} invoices.
                       </p>
                     ) : (
-                      <p className="text-destructive">{syncResult.error}</p>
+                      <>
+                        <p className="text-destructive">{syncResult.error}</p>
+                        {syncResult.code === "NO_STORED_TOKENS" && authUrl && (
+                          <Button asChild variant="outline" size="sm" className="w-full sm:w-auto">
+                            <a href={authUrl}>Connect to QuickBooks</a>
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
