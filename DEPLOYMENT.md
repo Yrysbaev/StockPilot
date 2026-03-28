@@ -11,6 +11,8 @@
    - `NEXT_PUBLIC_APP_URL` — your app URL, e.g. `https://your-project.vercel.app`
 5. **Deploy.** Vercel will run `npm run build` and deploy.
 
+**If the build fails with “No Output Directory named `public`”:** In Vercel → Project → **Settings** → **General** → **Build & Development Settings**, set **Framework Preset** to **Next.js**, clear **Output Directory** (leave it empty), and save. Next.js builds to `.next`; `public` is only for static assets, not the build output.
+
 After deploy, use your Vercel URL in Intuit:
 - **Redirect URI:** `https://your-project.vercel.app/api/auth/quickbooks/callback`
 - **EULA:** `https://your-project.vercel.app/legal/eula`
